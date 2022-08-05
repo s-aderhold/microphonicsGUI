@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>469</width>
-    <height>302</height>
+    <width>473</width>
+    <height>341</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -21,23 +21,72 @@
      </property>
     </widget>
    </item>
+   <item row="3" column="0">
+    <widget class="QGroupBox" name="groupBox">
+     <property name="title">
+      <string>GroupBox</string>
+     </property>
+     <layout class="QGridLayout" name="gridLayout_3">
+      <item row="1" column="0">
+       <widget class="QPushButton" name="button_open_data">
+        <property name="text">
+         <string>Open existing data</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="0" colspan="2">
+       <widget class="QComboBox" name="comboBox_plot_selector">
+        <item>
+         <property name="text">
+          <string>Take data and plot</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>Take data, no plot</string>
+         </property>
+        </item>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="QPushButton" name="button_start_measurement">
+        <property name="text">
+         <string>Start measurement</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item row="0" column="0">
+    <widget class="QLabel" name="label_2">
+     <property name="styleSheet">
+      <string notr="true">background-color: rgb(175, 217, 248)</string>
+     </property>
+     <property name="text">
+      <string/>
+     </property>
+    </widget>
+   </item>
    <item row="2" column="0">
     <widget class="QGroupBox" name="groupBox_2">
      <property name="title">
       <string>DAQ setup</string>
      </property>
      <layout class="QGridLayout" name="gridLayout_2">
-      <item row="0" column="0">
-       <widget class="QLabel" name="label_4">
-        <property name="text">
-         <string>No. of buffers:</string>
+      <item row="3" column="0" colspan="4">
+       <widget class="QLabel" name="label">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
         </property>
-       </widget>
-      </item>
-      <item row="1" column="2">
-       <widget class="QLabel" name="label_7">
         <property name="text">
-         <string>Acquisition time (sec):</string>
+         <string>For longer acquisition time, increase the number of waveform buffers to be collected. Data decimation effectively lowers the sampling rate by the chosen factor.</string>
+        </property>
+        <property name="wordWrap">
+         <bool>true</bool>
         </property>
        </widget>
       </item>
@@ -54,13 +103,17 @@
         </property>
        </widget>
       </item>
-      <item row="1" column="3">
-       <widget class="QLabel" name="label_acq_time">
-        <property name="toolTip">
-         <string>Acquisition time is dependent on number of buffers, data decimation and number of cavities selected</string>
-        </property>
+      <item row="0" column="0">
+       <widget class="QLabel" name="label_4">
         <property name="text">
-         <string>TextLabel</string>
+         <string>No. of buffers:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="label_5">
+        <property name="text">
+         <string>Data decimation:</string>
         </property>
        </widget>
       </item>
@@ -107,10 +160,10 @@
         </item>
        </widget>
       </item>
-      <item row="1" column="0">
-       <widget class="QLabel" name="label_5">
+      <item row="1" column="2">
+       <widget class="QLabel" name="label_7">
         <property name="text">
-         <string>Data decimation:</string>
+         <string>Acquisition time (sec):</string>
         </property>
        </widget>
       </item>
@@ -121,70 +174,17 @@
         </property>
        </widget>
       </item>
-      <item row="2" column="0" colspan="4">
-       <widget class="QLabel" name="label">
-        <property name="sizePolicy">
-         <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
-          <horstretch>0</horstretch>
-          <verstretch>0</verstretch>
-         </sizepolicy>
+      <item row="1" column="3">
+       <widget class="QLabel" name="label_acq_time">
+        <property name="toolTip">
+         <string>Acquisition time is dependent on number of buffers, data decimation and number of cavities selected</string>
         </property>
         <property name="text">
-         <string>For longer acquisition time, increase the number of waveform buffers to be collected. Data decimation effectively lowers the sampling rate by the chosen factor.</string>
-        </property>
-        <property name="wordWrap">
-         <bool>true</bool>
+         <string>TextLabel</string>
         </property>
        </widget>
       </item>
      </layout>
-    </widget>
-   </item>
-   <item row="3" column="0">
-    <widget class="QGroupBox" name="groupBox">
-     <property name="title">
-      <string>GroupBox</string>
-     </property>
-     <layout class="QGridLayout" name="gridLayout_3">
-      <item row="1" column="0">
-       <widget class="QPushButton" name="button_open_data">
-        <property name="text">
-         <string>Open existing data</string>
-        </property>
-       </widget>
-      </item>
-      <item row="1" column="1">
-       <widget class="QPushButton" name="button_start_measurement">
-        <property name="text">
-         <string>Start measurement</string>
-        </property>
-       </widget>
-      </item>
-      <item row="0" column="0" colspan="2">
-       <widget class="QComboBox" name="comboBox_plot_selector">
-        <item>
-         <property name="text">
-          <string>Take data and plot</string>
-         </property>
-        </item>
-        <item>
-         <property name="text">
-          <string>Take data, no plot</string>
-         </property>
-        </item>
-       </widget>
-      </item>
-     </layout>
-    </widget>
-   </item>
-   <item row="0" column="0">
-    <widget class="QLabel" name="label_2">
-     <property name="styleSheet">
-      <string notr="true">background-color: rgb(175, 217, 248)</string>
-     </property>
-     <property name="text">
-      <string/>
-     </property>
     </widget>
    </item>
   </layout>
