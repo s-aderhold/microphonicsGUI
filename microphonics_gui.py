@@ -1,14 +1,21 @@
 import sys
 from os import path
 
+import numpy as np
 from PyQt5.Qt import Qt
-from PyQt5.QtWidgets import QFileDialog, QGridLayout, QTreeWidget, QTreeWidgetItem, QVBoxLayout
+from PyQt5.QtCore import pyqtSlot
+from PyQt5.QtWidgets import QFileDialog, QGridLayout, QPushButton, QTreeWidget, QTreeWidgetItem, \
+    QTreeWidgetItemIterator, QVBoxLayout
 from lcls_tools.common.pydm_tools.displayUtils import showDisplay
 from lcls_tools.superconducting.scLinac import L1BHL, LINAC_TUPLES
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
 from pydm import Display
 from pyqtgraph.widgets.MatplotlibWidget import MatplotlibWidget
+from scipy import signal
+from scipy.fftpack import fft, fftfreq
+
+import microphonics_utils as utils
 
 BUFFER_LENGTH = 16384
 DEFAULT_SAMPLING_RATE = 2000
@@ -31,10 +38,13 @@ class MicrophonicsGUI(Display):
     def __init__(self, parent=None, args=None):
         super(MicrophonicsGUI, self).__init__(parent=parent, args=args)
 
-        self.plot_spectrogram = None
-        self.plot_timeseries = None
-        self.plot_fft = None
-        self.plot_histogram = None
+        self.button_confirm_selection = None
+        self.cavity_selection = None
+        self.tree_widget = None
+        self.widget_spectrogram = None
+        self.widget_timeseries = None
+        self.widget_fft = None
+        self.widget_histogram = None
         self.plotwindow = None
         self.pathHere = path.dirname(sys.modules[self.__module__].__file__)
 
@@ -48,8 +58,6 @@ class MicrophonicsGUI(Display):
         self.ui.spinBox_buffers.valueChanged.connect(self.update_daq_setting)
         self.update_daq_setting()
 
-        # self.plotwindow: Display = Display(ui_filename=self.get_path("plot_window.ui"))
-
     def get_path(self, fileName):
         return path.join(self.pathHere, fileName)
 
@@ -58,15 +66,19 @@ class MicrophonicsGUI(Display):
             self.cm_selection_window: Display = Display()
             self.cm_selection_window.setWindowTitle("CM and cavity selection")
             vlayout: QVBoxLayout = QVBoxLayout()
-            tree_widget: QTreeWidget = QTreeWidget()
-            vlayout.addWidget(tree_widget)
-            tree_widget.setHeaderLabel("")
+            self.tree_widget: QTreeWidget = QTreeWidget()
+            self.button_confirm_selection: QPushButton = QPushButton()
+            self.button_confirm_selection.setText("Confirm selection & close window")
+            vlayout.addWidget(self.button_confirm_selection)
+            vlayout.addWidget(self.tree_widget)
+            self.tree_widget.setHeaderLabel("")
             self.cm_selection_window.setLayout(vlayout)
+            self.button_confirm_selection.clicked.connect(self.update_cavity_selection)
 
             for linac_name, cm_list in LINAC_TUPLES:
                 if linac_name == "L1B":
                     cm_list += L1BHL
-                linac_item = QTreeWidgetItem(tree_widget)
+                linac_item = QTreeWidgetItem(self.tree_widget)
                 linac_item.setText(0, linac_name)
                 linac_item.setFlags(linac_item.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
 
@@ -79,39 +91,94 @@ class MicrophonicsGUI(Display):
                         cavity_item.setFlags(cavity_item.flags() | Qt.ItemIsUserCheckable)
                         cavity_item.setText(0, f"Cavity {cavity}")
                         cavity_item.setCheckState(0, Qt.Unchecked)
-            tree_widget.show()
+            self.tree_widget.show()
         showDisplay(self.cm_selection_window)
+
+    @pyqtSlot()
+    def update_cavity_selection(self):
+        self.cavity_selection = QTreeWidgetItemIterator(self.tree_widget, QTreeWidgetItemIterator.Checked)
+        # print statement for debugging purposes
+        while self.cavity_selection.value():
+            item = self.cavity_selection.value()
+            print(item.text(0))
+            self.cavity_selection += 1
+        self.cm_selection_window.close()
+
+    @property
+    def decimation_num(self):
+        return int(self.ui.comboBox_decimation.currentText())
+
+    @property
+    def sampling_rate(self):
+        return DEFAULT_SAMPLING_RATE / self.decimation_num
 
     def update_daq_setting(self):
 
         number_of_buffers = int(self.ui.spinBox_buffers.value())
-        decimation_num = int(self.ui.comboBox_decimation.currentText())
-        sampling_rate = DEFAULT_SAMPLING_RATE / decimation_num
-        self.ui.label_samplingrate.setNum(sampling_rate)
+        self.ui.label_samplingrate.setNum(self.sampling_rate)
         self.ui.label_acq_time.setNum(
-            BUFFER_LENGTH * decimation_num * number_of_buffers / DEFAULT_SAMPLING_RATE)
+            BUFFER_LENGTH * self.decimation_num * number_of_buffers / DEFAULT_SAMPLING_RATE)
 
     def load_data(self):
         file_picker = QFileDialog()
         (file_name, _) = file_picker.getOpenFileName(None, 'Pick a file', self.pathHere, '')
+        with open(file_name) as f:
+            line = f.readline()
+            while line.startswith('#') or line == '':
+                next(f)
+                next(f)
+                line = f.readline()
+            read_data = f.readlines()
+        f.close()
+        return read_data
 
     def plot_data(self):
         if not self.plotwindow:
             self.plotwindow = Display()
             self.plotwindow.setWindowTitle('Data plots')
             layout: QGridLayout = QGridLayout()
-            self.plot_histogram: MatplotlibWidget = MatplotlibWidget()
-            # self.plot_histogram.setTitle("Histogram")
-            self.plot_timeseries: MatplotlibWidget = MatplotlibWidget()
-            # self.plot_timeseries.setTitle("Time domain data")
-            self.plot_fft: MatplotlibWidget = MatplotlibWidget()
-            # self.plot_fft.setTitle("FFT")
-            self.plot_spectrogram: MatplotlibWidget = MatplotlibWidget()
-            # self.plot_spectrogram.setTitle("Spectrogram")
-            layout.addWidget(self.plot_timeseries, 1, 1, 1, 1)
-            layout.addWidget(self.plot_histogram, 1, 2, 1, 2)
-            layout.addWidget(self.plot_fft, 2, 1, 2, 1)
-            layout.addWidget(self.plot_spectrogram, 2, 2, 2, 2)
+            self.widget_histogram: MatplotlibWidget = MatplotlibWidget()
+            self.widget_timeseries: MatplotlibWidget = MatplotlibWidget()
+            self.widget_fft: MatplotlibWidget = MatplotlibWidget()
+            self.widget_spectrogram: MatplotlibWidget = MatplotlibWidget()
+            layout.addWidget(self.widget_timeseries, 1, 1, 1, 1)
+            layout.addWidget(self.widget_histogram, 1, 2, 1, 2)
+            layout.addWidget(self.widget_fft, 2, 1, 2, 1)
+            layout.addWidget(self.widget_spectrogram, 2, 2, 2, 2)
             self.plotwindow.setLayout(layout)
+            self.plot_histogram = self.widget_histogram.getFigure().add_subplot(111)
+            self.plot_fft = self.widget_fft.getFigure().add_subplot(111)
+            self.plot_timeseries = self.widget_timeseries.getFigure().add_subplot(111)
+            self.plot_spectrogram = self.widget_spectrogram.getFigure().add_subplot(111)
 
-            showDisplay(self.plotwindow)
+        raw_data = self.load_data()
+        parsed_data = utils.parse_data(raw_data)
+
+        for index, cavity_data in enumerate(parsed_data):
+            if len(cavity_data) > 0:
+                self.plot_histogram.hist(cavity_data, bins=140, histtype='step', log='True')
+                self.make_fft_plot(cavity_data, self.plot_fft)
+                self.make_timeseries_plot(cavity_data, self.plot_timeseries)
+                self.make_spectrogram_plot(cavity_data, self.plot_spectrogram)
+        showDisplay(self.plotwindow)
+
+    @property
+    def sample_spacing(self):
+        return 1.0 / (DEFAULT_SAMPLING_RATE / int(self.ui.comboBox_decimation.currentText()))
+
+    def make_fft_plot(self, cavity_data, plot_widget):
+        number_of_points = len(cavity_data)
+
+        fft_data = fft(cavity_data)
+        frequencies = fftfreq(number_of_points, self.sample_spacing)[0:number_of_points // 2]
+        plot_widget.plot(frequencies, 2.0 / number_of_points * np.abs(fft_data[0:number_of_points // 2]))
+
+    def make_timeseries_plot(self, cavity_data, plot_widget):
+        time_vector = list(
+            map(lambda x: x * self.sample_spacing, np.linspace(1, len(cavity_data), num=len(cavity_data))))
+        plot_widget.plot(time_vector, cavity_data)
+
+    def make_spectrogram_plot(self, cavity_data, plot_widget):
+        data_array = np.array(cavity_data)
+        f, t, Sxx = signal.spectrogram(data_array, self.sampling_rate)
+        plot_widget.pcolormesh(t, f, Sxx, shading='gouraud')
