@@ -7,7 +7,7 @@ from PyQt5.QtCore import pyqtSlot
 from PyQt5.QtWidgets import QFileDialog, QGridLayout, QPushButton, QTreeWidget, QTreeWidgetItem, \
     QTreeWidgetItemIterator, QVBoxLayout
 from lcls_tools.common.pydm_tools.displayUtils import showDisplay
-from lcls_tools.superconducting.scLinac import L1BHL, LINAC_TUPLES
+from lcls_tools.superconducting.scLinac import CRYOMODULE_OBJECTS, L1BHL, LINAC_TUPLES
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
 from pydm import Display
@@ -31,6 +31,20 @@ class PlotCanvas(FigureCanvasQTAgg):
         super(PlotCanvas, self).__init__(fig)
 
 
+class QTreeCavityItem(QTreeWidgetItem):
+    def __init__(self, parent, cav_num, cm_name):
+        super().__init__(parent)
+        self.cav_num = cav_num
+        self.cm_name = cm_name
+        self._cavity = None
+
+    @property
+    def cavity(self):
+        if not self._cavity:
+            self._cavity = CRYOMODULE_OBJECTS[self.cm_name].cavities[self.cav_num]
+        return self._cavity
+
+
 class MicrophonicsGUI(Display):
     def ui_filename(self):
         return "microphonics_gui.ui"
@@ -38,6 +52,10 @@ class MicrophonicsGUI(Display):
     def __init__(self, parent=None, args=None):
         super(MicrophonicsGUI, self).__init__(parent=parent, args=args)
 
+        self.plot_spectrogram = None
+        self.plot_timeseries = None
+        self.plot_fft = None
+        self.plot_histogram = None
         self.button_confirm_selection = None
         self.cavity_selection = None
         self.tree_widget = None
@@ -46,6 +64,7 @@ class MicrophonicsGUI(Display):
         self.widget_fft = None
         self.widget_histogram = None
         self.plotwindow = None
+        self.selection = None
         self.pathHere = path.dirname(sys.modules[self.__module__].__file__)
 
         self.cm_selection_window: Display = None
@@ -87,7 +106,7 @@ class MicrophonicsGUI(Display):
                     cm_item.setText(0, f"CM{cm_name}")
                     cm_item.setFlags(cm_item.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
                     for cavity in range(1, 9):
-                        cavity_item = QTreeWidgetItem(cm_item)
+                        cavity_item = QTreeCavityItem(cm_item, cav_num=cavity, cm_name=cm_name)
                         cavity_item.setFlags(cavity_item.flags() | Qt.ItemIsUserCheckable)
                         cavity_item.setText(0, f"Cavity {cavity}")
                         cavity_item.setCheckState(0, Qt.Unchecked)
@@ -97,10 +116,13 @@ class MicrophonicsGUI(Display):
     @pyqtSlot()
     def update_cavity_selection(self):
         self.cavity_selection = QTreeWidgetItemIterator(self.tree_widget, QTreeWidgetItemIterator.Checked)
+        self.selection = []
         # print statement for debugging purposes
         while self.cavity_selection.value():
             item = self.cavity_selection.value()
-            print(item.text(0))
+            if isinstance(item, QTreeCavityItem):
+                self.selection.append(item.cavity)
+                print(type(item))
             self.cavity_selection += 1
         self.cm_selection_window.close()
 
@@ -124,9 +146,7 @@ class MicrophonicsGUI(Display):
         (file_name, _) = file_picker.getOpenFileName(None, 'Pick a file', self.pathHere, '')
         with open(file_name) as f:
             line = f.readline()
-            while line.startswith('#') or line == '':
-                next(f)
-                next(f)
+            while line.startswith('#') or not line.strip():
                 line = f.readline()
             read_data = f.readlines()
         f.close()
@@ -146,10 +166,26 @@ class MicrophonicsGUI(Display):
             layout.addWidget(self.widget_fft, 2, 1, 2, 1)
             layout.addWidget(self.widget_spectrogram, 2, 2, 2, 2)
             self.plotwindow.setLayout(layout)
+
             self.plot_histogram = self.widget_histogram.getFigure().add_subplot(111)
+            # self.plot_histogram.set
+            self.plot_histogram.set_xlabel('Detune (Hz)')
+            self.plot_histogram.set_ylabel('Counts')
+
             self.plot_fft = self.widget_fft.getFigure().add_subplot(111)
+            self.plot_fft.set_xlabel('Frequency (Hz)')
+            self.plot_fft.set_ylabel('Relative amplitude')
+            self.plot_fft.set_xlim(0, 150)
+            self.plot_fft.grid(True)
+
             self.plot_timeseries = self.widget_timeseries.getFigure().add_subplot(111)
+            self.plot_timeseries.set_xlabel('Time (sec)')
+            self.plot_timeseries.set_ylabel('Detune (Hz)')
+
             self.plot_spectrogram = self.widget_spectrogram.getFigure().add_subplot(111)
+            self.plot_spectrogram.set_xlabel('Time (sec)')
+            self.plot_spectrogram.set_ylabel('Frequency (Hz)')
+            self.plot_spectrogram.set_ylim(150)
 
         raw_data = self.load_data()
         parsed_data = utils.parse_data(raw_data)
