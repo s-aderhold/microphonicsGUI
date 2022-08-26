@@ -7,7 +7,7 @@ from PyQt5.QtCore import pyqtSlot
 from PyQt5.QtWidgets import QFileDialog, QGridLayout, QPushButton, QTreeWidget, QTreeWidgetItem, \
     QTreeWidgetItemIterator, QVBoxLayout
 from lcls_tools.common.pydm_tools.displayUtils import showDisplay
-from lcls_tools.superconducting.scLinac import CRYOMODULE_OBJECTS, L1BHL, LINAC_TUPLES
+from lcls_tools.superconducting.scLinac import CRYOMODULE_OBJECTS, L1BHL, LINAC_TUPLES, Rack
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
 from pydm import Display
@@ -31,18 +31,25 @@ class PlotCanvas(FigureCanvasQTAgg):
         super(PlotCanvas, self).__init__(fig)
 
 
-class QTreeCavityItem(QTreeWidgetItem):
-    def __init__(self, parent, cav_num, cm_name):
+class QTreeRackItem(QTreeWidgetItem):
+    def __init__(self, parent, cm_name, rackName):
         super().__init__(parent)
-        self.cav_num = cav_num
         self.cm_name = cm_name
-        self._cavity = None
+        self.rackName = rackName
+        self._rack = None
 
     @property
-    def cavity(self):
-        if not self._cavity:
-            self._cavity = CRYOMODULE_OBJECTS[self.cm_name].cavities[self.cav_num]
-        return self._cavity
+    def rack(self):
+        if not self._rack:
+            self._rack = CRYOMODULE_OBJECTS[self.cm_name].racks[self.rackName]
+        return self._rack
+
+
+class MicrophonicsRack(Rack):
+    def __init__(self, rackName, cryoObject):
+        super().__init__(rackName, cryoObject)
+
+        self.res_chassis_address = "ca://" + self.cryomodule.pvPrefix + f"RES{rackName}:"
 
 
 class MicrophonicsGUI(Display):
@@ -57,20 +64,20 @@ class MicrophonicsGUI(Display):
         self.plot_fft = None
         self.plot_histogram = None
         self.button_confirm_selection = None
-        self.cavity_selection = None
+        self.rack_selection = None
         self.tree_widget = None
         self.widget_spectrogram = None
         self.widget_timeseries = None
         self.widget_fft = None
         self.widget_histogram = None
         self.plotwindow = None
-        self.selection = None
+        self.selected_racks = None
         self.pathHere = path.dirname(sys.modules[self.__module__].__file__)
 
         self.cm_selection_window: Display = None
         self.button_cm_selection.clicked.connect(self.open_cm_selection_window)
 
-        self.ui.button_open_data.clicked.connect(self.load_data)
+        self.ui.button_open_data.clicked.connect(self.plot_data)
         self.ui.button_start_measurement.clicked.connect(self.plot_data)
 
         self.ui.comboBox_decimation.currentIndexChanged.connect(self.update_daq_setting)
@@ -83,16 +90,16 @@ class MicrophonicsGUI(Display):
     def open_cm_selection_window(self):
         if not self.cm_selection_window:
             self.cm_selection_window: Display = Display()
-            self.cm_selection_window.setWindowTitle("CM and cavity selection")
+            self.cm_selection_window.setWindowTitle("CM and rack selection")
             vlayout: QVBoxLayout = QVBoxLayout()
             self.tree_widget: QTreeWidget = QTreeWidget()
             self.button_confirm_selection: QPushButton = QPushButton()
-            self.button_confirm_selection.setText("Confirm selection & close window")
+            self.button_confirm_selection.setText("Confirm selection and close window")
             vlayout.addWidget(self.button_confirm_selection)
             vlayout.addWidget(self.tree_widget)
             self.tree_widget.setHeaderLabel("")
             self.cm_selection_window.setLayout(vlayout)
-            self.button_confirm_selection.clicked.connect(self.update_cavity_selection)
+            self.button_confirm_selection.clicked.connect(self.update_rack_selection)
 
             for linac_name, cm_list in LINAC_TUPLES:
                 if linac_name == "L1B":
@@ -105,25 +112,28 @@ class MicrophonicsGUI(Display):
                     cm_item = QTreeWidgetItem(linac_item)
                     cm_item.setText(0, f"CM{cm_name}")
                     cm_item.setFlags(cm_item.flags() | Qt.ItemIsTristate | Qt.ItemIsUserCheckable)
-                    for cavity in range(1, 9):
-                        cavity_item = QTreeCavityItem(cm_item, cav_num=cavity, cm_name=cm_name)
-                        cavity_item.setFlags(cavity_item.flags() | Qt.ItemIsUserCheckable)
-                        cavity_item.setText(0, f"Cavity {cavity}")
-                        cavity_item.setCheckState(0, Qt.Unchecked)
+                    for rack in ['A', 'B']:
+                        rack_item = QTreeRackItem(cm_item, rackName=rack, cm_name=cm_name)
+                        rack_item.setFlags(rack_item.flags() | Qt.ItemIsUserCheckable)
+                        if rack == 'A':
+                            rack_item.setText(0, f"Rack {rack}: cavities 1-4")
+                        else:
+                            rack_item.setText(0, f"Rack {rack}: cavities 5-8")
+                        rack_item.setCheckState(0, Qt.Unchecked)
             self.tree_widget.show()
         showDisplay(self.cm_selection_window)
 
     @pyqtSlot()
-    def update_cavity_selection(self):
-        self.cavity_selection = QTreeWidgetItemIterator(self.tree_widget, QTreeWidgetItemIterator.Checked)
-        self.selection = []
+    def update_rack_selection(self):
+        self.rack_selection = QTreeWidgetItemIterator(self.tree_widget, QTreeWidgetItemIterator.Checked)
+        self.selected_racks = []
         # print statement for debugging purposes
-        while self.cavity_selection.value():
-            item = self.cavity_selection.value()
-            if isinstance(item, QTreeCavityItem):
-                self.selection.append(item.cavity)
+        while self.rack_selection.value():
+            item = self.rack_selection.value()
+            if isinstance(item, QTreeRackItem):
+                self.selected_racks.append(item.rack)
                 print(type(item))
-            self.cavity_selection += 1
+            self.rack_selection += 1
         self.cm_selection_window.close()
 
     @property
@@ -153,6 +163,7 @@ class MicrophonicsGUI(Display):
         return read_data
 
     def plot_data(self):
+        # TODO add tabs for plotting multiple cavities
         if not self.plotwindow:
             self.plotwindow = Display()
             self.plotwindow.setWindowTitle('Data plots')
