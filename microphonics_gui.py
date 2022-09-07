@@ -1,4 +1,5 @@
 import sys
+from datetime import datetime
 from os import path
 
 import numpy as np
@@ -51,6 +52,26 @@ class MicrophonicsRack(Rack):
 
         self.res_chassis_address = "ca://" + self.cryomodule.pvPrefix + f"RES{rackName}:"
 
+        if self.rackName == 'A':
+            self.cavity_string = '1234'
+        else:
+            self.cavity_string = '5678'
+
+    def make_data_directory_path(self, timestamp: datetime):
+        year = str(timestamp.year)
+        month = '02d' % timestamp.month
+        day = '02d' % timestamp.day
+        data_directory_path = path.join(DATA_DIR_PATH, self.cryomodule.pvPrefix[:-1], year, month, day)
+        return data_directory_path
+
+    def make_output_filename(self, timestamp: datetime, number_of_buffers):
+        timestamp = timestamp.strftime("%Y%m%d" + "_" + "%H%M%S")
+
+        output_filename = 'res_CM' + self.cryomodule.name + '_cav' + \
+                          self.cavity_string + '_c' + number_of_buffers + '_' \
+                          + timestamp
+        return output_filename
+
 
 class MicrophonicsGUI(Display):
     def ui_filename(self):
@@ -78,11 +99,14 @@ class MicrophonicsGUI(Display):
         self.button_cm_selection.clicked.connect(self.open_cm_selection_window)
 
         self.ui.button_open_data.clicked.connect(self.plot_data)
-        self.ui.button_start_measurement.clicked.connect(self.plot_data)
+        self.ui.button_start_measurement.clicked.connect(self.take_measurement)
 
         self.ui.comboBox_decimation.currentIndexChanged.connect(self.update_daq_setting)
         self.ui.spinBox_buffers.valueChanged.connect(self.update_daq_setting)
         self.update_daq_setting()
+
+    def take_measurement(self):
+        timestamp = datetime.now()
 
     def get_path(self, fileName):
         return path.join(self.pathHere, fileName)
@@ -227,5 +251,5 @@ class MicrophonicsGUI(Display):
 
     def make_spectrogram_plot(self, cavity_data, plot_widget):
         data_array = np.array(cavity_data)
-        f, t, Sxx = signal.spectrogram(data_array, self.sampling_rate)
-        plot_widget.pcolormesh(t, f, Sxx, shading='gouraud')
+        frequencies, times, spectrogram_data = signal.spectrogram(data_array, self.sampling_rate)
+        plot_widget.pcolormesh(times, frequencies, spectrogram_data, shading='gouraud')
