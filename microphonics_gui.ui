@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>473</width>
-    <height>341</height>
+    <width>523</width>
+    <height>398</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -34,6 +34,13 @@
         </property>
        </widget>
       </item>
+      <item row="1" column="1">
+       <widget class="QPushButton" name="button_start_measurement">
+        <property name="text">
+         <string>Start measurement</string>
+        </property>
+       </widget>
+      </item>
       <item row="0" column="0" colspan="2">
        <widget class="QComboBox" name="comboBox_plot_selector">
         <item>
@@ -48,10 +55,10 @@
         </item>
        </widget>
       </item>
-      <item row="1" column="1">
-       <widget class="QPushButton" name="button_start_measurement">
+      <item row="2" column="0" colspan="2">
+       <widget class="QLabel" name="label_status">
         <property name="text">
-         <string>Start measurement</string>
+         <string>TextLabel</string>
         </property>
        </widget>
       </item>

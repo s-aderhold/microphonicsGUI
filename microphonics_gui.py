@@ -4,10 +4,10 @@ from os import path
 
 import numpy as np
 from PyQt5.Qt import Qt
-from PyQt5.QtCore import pyqtSlot
-from PyQt5.QtWidgets import QFileDialog, QGridLayout, QPushButton, QTreeWidget, QTreeWidgetItem, \
+from PyQt5.QtCore import QRunnable, pyqtSlot
+from PyQt5.QtWidgets import QFileDialog, QGridLayout, QLabel, QPushButton, QTreeWidget, QTreeWidgetItem, \
     QTreeWidgetItemIterator, QVBoxLayout
-from lcls_tools.common.pydm_tools.displayUtils import showDisplay
+from lcls_tools.common.pydm_tools.displayUtils import WorkerSignals, showDisplay
 from lcls_tools.superconducting.scLinac import CRYOMODULE_OBJECTS, L1BHL, LINAC_TUPLES, Rack
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
@@ -53,9 +53,9 @@ class MicrophonicsRack(Rack):
         self.res_chassis_address = "ca://" + self.cryomodule.pvPrefix + f"RES{rackName}:"
 
         if self.rackName == 'A':
-            self.cavity_string = '1234'
+            self.cavity_string = '1 2 3 4'
         else:
-            self.cavity_string = '5678'
+            self.cavity_string = '5 6 7 8'
 
     def make_data_directory_path(self, timestamp: datetime):
         year = str(timestamp.year)
@@ -64,13 +64,32 @@ class MicrophonicsRack(Rack):
         data_directory_path = path.join(DATA_DIR_PATH, self.cryomodule.pvPrefix[:-1], year, month, day)
         return data_directory_path
 
-    def make_output_filename(self, timestamp: datetime, number_of_buffers):
+    def make_output_filename(self, timestamp: datetime, number_of_buffers: str):
         timestamp = timestamp.strftime("%Y%m%d" + "_" + "%H%M%S")
 
         output_filename = 'res_CM' + self.cryomodule.name + '_cav' + \
                           self.cavity_string + '_c' + number_of_buffers + '_' \
                           + timestamp
         return output_filename
+
+    def make_command_string(self, decimation: str, number_of_buffers: str, timestamp: datetime):
+        path_string = str(self.make_data_directory_path(timestamp))
+        filename = self.make_output_filename(timestamp, number_of_buffers)
+
+        command_string = ['python', SCRIPT_PATH, '-D', path_string, '-a', self.res_chassis_address, '-wsp', decimation,
+                          '-acav', self.cavity_string, '-ch DF', '-c', number_of_buffers, '-F', filename]
+        return command_string
+
+
+class MeasurementWorker(QRunnable):
+    def __init__(self, rack: MicrophonicsRack, status_label: QLabel):
+        super().__init__()
+        self.signals = WorkerSignals(status_label)
+        self.rack = rack
+
+    def run(self) -> None:
+        self.signals.status.emit("Starting measurement")
+        self.signals.finished.emit("Measurement done")
 
 
 class MicrophonicsGUI(Display):
